@@ -1,4 +1,4 @@
-@import "~normalize.css/normalize.css";
+@import "normalize.css/normalize.css";
 @import url(https://fonts.googleapis.com/css?family=Lato:400,700,400italic,700italic);
 @import "glyphicons.scss";
 
@@ -116,7 +116,7 @@ body {
 
 @import url("https://fonts.googleapis.com/css?family=Allerta+Stencil|Roboto:300,300i,500,500i,700,700i");
 
-@import "./src/components/app.scss";
-@import "./src/components/arrival_list.scss";
-@import "./src/components/map.scss";
-@import "./src/components/stop_list.scss";
+@import "./components/app.scss";
+@import "./components/arrival_list.scss";
+@import "./components/map.scss";
+@import "./components/stop_list.scss";

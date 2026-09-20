@@ -7,25 +7,26 @@ export default function Info() {
       <Header />
       <div className="info-text">
         <p>
-          Trimetric is a realtime visualization of the{" "}
-          <a href="https://www.trimet.org">Trimet</a> transit system in
-          Portland, OR. The view that you are currently looking at is showing
-          the location of every vehicle and transit stop. The orange dots are
-          vehicles, and the black dots are stops.{" "}
+          Trimetric is a realtime visualization of Delhi&apos;s bus network,
+          built on the open data published by{" "}
+          <a href="https://otd.delhi.gov.in">Open Transit Data Delhi</a>. It
+          covers DTC and DIMTS cluster buses. The view you are currently
+          looking at shows the location of every vehicle and bus stop. The
+          orange dots are vehicles, and the black dots are stops.{" "}
         </p>
         <p>
           If you zoom in, you can see more information about the stops,
           including upcoming arrivals.{" "}
         </p>
         <p>
-          The data for the view comes from static and realtime{" "}
-          <a href="https://developers.google.com/transit/">GTFS</a> feeds
-          provided by Trimet.
+          The data for the view comes from the static and realtime{" "}
+          <a href="https://gtfs.org">GTFS</a> feeds published on the Open
+          Transit Data portal by the Government of NCT of Delhi.
         </p>
         <p className="info-text-credits">
-          Trimetric was built by me,{" "}
+          Trimetric was originally built for Portland&apos;s TriMet network by{" "}
           <a href="https://briand.co">Brian Davidson</a>. It&apos;s open source
-          and you can find the code at
+          and you can find the original at
           <a href="https://github.com/bsdavidson/trimetric">
             {" "}
             github.com/bsdavidson/trimetric
@@ -48,13 +49,6 @@ export default function Info() {
             alt="Redux"
             className="info-icon redux"
             src="/assets/redux.svg"
-          />
-        </a>
-        <a href="https://kafka.apache.org/" title="Kafka">
-          <img
-            alt="Kafka"
-            className="info-icon kafka"
-            src="/assets/kafka.svg"
           />
         </a>
         <a href="https://golang.org/" title="Go">

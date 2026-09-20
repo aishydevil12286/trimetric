@@ -32,6 +32,10 @@ module.exports = {
         avoidEscape: true
       }
     ],
-    "react/prop-types": "off"
+    "react/prop-types": "off",
+    // The app is still on React 16 and uses componentWillReceiveProps and
+    // ReactDOM.render. Both still work there; migrating to the new lifecycle
+    // and createRoot is a separate job, so flag them without failing lint.
+    "react/no-deprecated": "warn"
   }
 };

@@ -11,21 +11,22 @@ import {
   UPDATE_VIEWPORT
 } from "./actions";
 
+// Connaught Place, central Delhi.
 export const DEFAULT_LOCATION = {
-  lat: 45.522236,
-  lng: -122.675827,
+  lat: 28.6328,
+  lng: 77.2197,
   gps: false,
   locationType: LocationTypes.HOME
 };
 
 export const DEFAULT_BOUNDING_BOX = {
   sw: {
-    lat: 45.50889931447199,
-    lng: -122.68664166674807
+    lat: 28.6178,
+    lng: 77.2047
   },
   ne: {
-    lat: 45.53556952479618,
-    lng: -122.66501233325198
+    lat: 28.6478,
+    lng: 77.2347
   }
 };
 
@@ -37,33 +38,6 @@ const VEHICLE_TYPES = {
   2: "rail",
   3: "bus"
 };
-
-function mergeUpdates(state, updates, isEqualFunc) {
-  let newState = state.slice();
-  let newCount = 0;
-  let expired = 0;
-  let updateCount = 0;
-  let expiredTimestamp = new Date().getTime() / 1000 - 300;
-  updates.forEach(u => {
-    for (let i = 0; i < newState.length; i++) {
-      if (isEqualFunc(u, newState[i])) {
-        newState[i] = u;
-        updateCount++;
-        let current = new Date().getTime() / 1000;
-
-        return;
-      }
-      if (newState[i].timestamp < expiredTimestamp) {
-        expired++;
-        return;
-      }
-    }
-    newCount++;
-    newState.push(u);
-  });
-
-  return newState;
-}
 
 export function getVehicleType(routeType) {
   return VEHICLE_TYPES[routeType] || "bus";
@@ -100,7 +74,8 @@ function lineData(state = [], action) {
     case UPDATE_LINES: {
       let routeLineIndexes = {};
       let routeLines = [];
-      action.lineData.forEach(s => {
+      // An empty result set arrives as null, not [].
+      (action.lineData || []).forEach(s => {
         if (!s) {
           return;
         }
@@ -192,7 +167,7 @@ function stops(state = [], action) {
 function stopsPointData(state = [], action) {
   switch (action.type) {
     case UPDATE_STOPS: {
-      let stops = action.stops.map(s => ({
+      let stops = (action.stops || []).map(s => ({
         type: "Feature",
         geometry: {
           type: "Point",
@@ -215,7 +190,7 @@ function stopsPointData(state = [], action) {
 function stopsIconData(state = [], action) {
   switch (action.type) {
     case UPDATE_STOPS: {
-      let stops = action.stops.map(s => ({
+      let stops = (action.stops || []).map(s => ({
         position: [s.lng, s.lat, 0],
         icon: "stop",
         size: 1
@@ -245,7 +220,7 @@ function vehicles(state = [], action) {
 function vehiclesIconData(state = [], action) {
   switch (action.type) {
     case UPDATE_VEHICLES: {
-      let vehiclesIconData = action.vehicles.map(v => ({
+      let vehiclesIconData = (action.vehicles || []).map(v => ({
         position: [v.position.lng, v.position.lat, 10],
         icon: getVehicleType(v.route_type),
         size: 1.4,
@@ -267,7 +242,7 @@ function vehiclesIconData(state = [], action) {
 function vehiclesPointData(state = [], action) {
   switch (action.type) {
     case UPDATE_VEHICLES: {
-      let vehiclesPointData = action.vehicles.map(v => ({
+      let vehiclesPointData = (action.vehicles || []).map(v => ({
         type: "Feature",
         geometry: {
           type: "Point",

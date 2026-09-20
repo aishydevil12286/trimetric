@@ -6,7 +6,11 @@ import {updateVehicles} from "../src/actions";
 
 describe("Reducers", function() {
   describe("vehicles", function() {
-    it("takes action UPDATE_VEHICLES and updates state", function() {
+    // Each poll returns the full set of vehicles reporting in the last few
+    // minutes, so an update replaces the previous set rather than merging
+    // into it. Merging would leave a vehicle on the map indefinitely once it
+    // stopped reporting.
+    it("takes action UPDATE_VEHICLES and replaces state", function() {
       let store = createStore(reducer, {
         vehicles: [
           {
@@ -69,15 +73,6 @@ describe("Reducers", function() {
       );
       let state = store.getState();
       assert.deepEqual(state.vehicles, [
-        {
-          vehicle: {
-            id: 1
-          },
-          position: {
-            lat: 123,
-            lng: 456
-          }
-        },
         {
           vehicle: {
             id: 2

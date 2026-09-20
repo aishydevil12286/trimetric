@@ -20,7 +20,7 @@ export class ColorMap {
   }
 
   getColorForKey(key) {
-    if (!this.map.hasOwnProperty(key)) {
+    if (!Object.prototype.hasOwnProperty.call(this.map, key)) {
       this.mapLength++;
       this.map[key] = COLORS[this.mapLength % COLORS.length];
     }

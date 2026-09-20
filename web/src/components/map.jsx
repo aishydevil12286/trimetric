@@ -1,13 +1,19 @@
 import React, {Component} from "react";
 import {connect} from "react-redux";
 import PropTypes from "prop-types";
-import InteractiveMap, {experimental} from "react-map-gl";
-import DeckGL, {GeoJsonLayer, IconLayer} from "deck.gl";
-import "mapbox-gl/dist/mapbox-gl.css";
+import Map from "react-map-gl/maplibre";
+import DeckGL from "@deck.gl/react";
+import {FlyToInterpolator, WebMercatorViewport} from "@deck.gl/core";
+import {GeoJsonLayer, IconLayer} from "@deck.gl/layers";
+import "maplibre-gl/dist/maplibre-gl.css";
 
 import {DEFAULT_ZOOM} from "../store";
 import {LocationTypes, clearLocation} from "../actions";
 import {TrimetricPropTypes} from "./prop_types";
+
+// MapLibre renders this style directly; unlike Mapbox GL it needs no access
+// token, so the app draws a map as soon as it starts.
+const MAP_STYLE = process.env.MAP_STYLE;
 
 const IconMapping = {
   tram: {
@@ -42,48 +48,28 @@ function clamp(f) {
   return f < 0 ? 0 : f > 1 ? 1 : f;
 }
 
-export class CustomMapControls extends experimental.MapControls {
-  constructor(props) {
-    super(props);
-    this.props = props;
-    this.events = ["click", "mousedown"];
-  }
+// Point features carry their own styling in properties, so the layers read
+// colours and radii from there rather than taking a single value each.
+const featureFillColor = f => f.properties.fillColor || [0, 0, 0, 255];
+const featureLineColor = f => f.properties.lineColor || [0, 0, 0, 255];
+const featurePointRadius = f => f.properties.radius || 1;
 
-  handleEvent(event) {
-    if (event.type === "mousedown") {
-      this.props.onMouseDown();
-    }
-    return super.handleEvent(event);
-  }
-}
-
-class MapBox extends Component {
+export class MapBox extends Component {
   constructor(props) {
     super(props);
 
     this.state = {
-      viewport: {
+      viewState: {
         latitude: this.props.location.lat,
         longitude: this.props.location.lng,
         zoom: DEFAULT_ZOOM,
         pitch: 45,
         bearing: 0
-      },
-      settings: {
-        dragPan: true
-      },
-      test: false
+      }
     };
-    this.handleMapRef = this.handleMapRef.bind(this);
-    this.handleMapMouseDown = this.handleMapMouseDown.bind(this);
-    this.handleViewportChange = this.handleViewportChange.bind(this);
-    this.mapControls = new CustomMapControls({
-      onMouseDown: this.handleMapMouseDown
-    });
-  }
 
-  handleMapRef(map) {
-    this.mapRef = map;
+    this.handleViewStateChange = this.handleViewStateChange.bind(this);
+    this.handleDragStart = this.handleDragStart.bind(this);
   }
 
   componentWillReceiveProps(nextProps) {
@@ -112,40 +98,53 @@ class MapBox extends Component {
       };
     }
 
-    this.handleViewportChange({
-      latitude: newPos.lat,
-      longitude: newPos.lng,
-      zoom: newPos.locationType === LocationTypes.HOME ? 17 : 18,
-      transitionInterpolator: experimental.viewportFlyToInterpolator,
-      transitionDuration: 1200
+    this.handleViewStateChange({
+      viewState: Object.assign({}, this.state.viewState, {
+        latitude: newPos.lat,
+        longitude: newPos.lng,
+        zoom: newPos.locationType === LocationTypes.HOME ? 17 : 18,
+        transitionInterpolator: new FlyToInterpolator(),
+        transitionDuration: 1200
+      })
     });
 
-    if (this.state.viewport.zoom < 15) {
+    if (this.state.viewState.zoom < 15) {
       this.props.onClearLocation();
     }
   }
 
-  handleViewportChange(viewport) {
-    this.setState({viewport: Object.assign({}, this.state.viewport, viewport)});
-    if (this.props.onViewportChange) {
-      let bounds = this.mapRef.getMap().getBounds();
-      let zoom = this.state.viewport.zoom;
-      this.props.onViewportChange(
-        {
-          sw: {lat: bounds.getSouth(), lng: bounds.getWest()},
-          ne: {lat: bounds.getNorth(), lng: bounds.getEast()}
-        },
-        zoom
-      );
+  handleViewStateChange({viewState}) {
+    this.setState({viewState});
+
+    if (!this.props.onViewportChange) {
+      return;
     }
+
+    // Deriving the bounds from the view state rather than asking the map for
+    // them keeps this independent of when the underlying map instance is
+    // ready, which used to require holding a ref to it.
+    const [west, south, east, north] = new WebMercatorViewport(
+      Object.assign({}, viewState, {
+        width: this.props.width,
+        height: this.props.height
+      })
+    ).getBounds();
+
+    this.props.onViewportChange(
+      {
+        sw: {lat: south, lng: west},
+        ne: {lat: north, lng: east}
+      },
+      viewState.zoom
+    );
   }
 
-  handleMapMouseDown() {
+  handleDragStart() {
     this.props.onClearLocation();
   }
 
   render() {
-    let zoom = this.state.viewport.zoom;
+    let zoom = this.state.viewState.zoom;
     let tween = zoom - 12;
 
     let layers = [];
@@ -181,8 +180,9 @@ class MapBox extends Component {
           extruded: true,
           filled: true,
           lineWidthMinPixels: 4,
-          visible: 1,
-          fp64: true
+          getFillColor: featureFillColor,
+          getLineColor: featureLineColor,
+          getPointRadius: featurePointRadius
         })
       );
     }
@@ -214,8 +214,9 @@ class MapBox extends Component {
           filled: true,
           lineWidthMinPixels: 2,
           pointRadiusScale: 30,
-          visible: 1,
-          fp64: true
+          getFillColor: featureFillColor,
+          getLineColor: featureLineColor,
+          getPointRadius: featurePointRadius
         })
       );
     }
@@ -231,7 +232,9 @@ class MapBox extends Component {
           pointRadiusScale:
             696.0864 - 106.8473 * zoom + 4.205566 * Math.pow(zoom, 2),
           visible: tween < 1,
-          fp64: true
+          getFillColor: featureFillColor,
+          getLineColor: featureLineColor,
+          getPointRadius: featurePointRadius
         })
       );
     }
@@ -245,7 +248,9 @@ class MapBox extends Component {
           iconMapping: IconMapping,
           visible: tween > 0,
           opacity: 1,
-          fp64: true,
+          getPosition: d => d.position,
+          getIcon: d => d.icon,
+          getSize: d => d.size,
           sizeScale:
             -40.28287 + 0.1462691 * zoom + 0.3593278 * Math.pow(zoom, 2)
         })
@@ -259,8 +264,7 @@ class MapBox extends Component {
             id: "geojson-line-layer" + i,
             data: l,
             getLineColor: () => l.color,
-            lineWidthMinPixels: l.width,
-            fp64: true
+            lineWidthMinPixels: l.width
           });
         })
       );
@@ -277,7 +281,9 @@ class MapBox extends Component {
           pointRadiusScale:
             696.0864 - 106.8473 * zoom + 4.205566 * Math.pow(zoom, 2),
           visible: tween < 1,
-          fp64: true
+          getFillColor: featureFillColor,
+          getLineColor: featureLineColor,
+          getPointRadius: featurePointRadius
         })
       );
     }
@@ -291,7 +297,9 @@ class MapBox extends Component {
           iconMapping: IconMapping,
           visible: tween > 0,
           opacity: 1,
-          fp64: true,
+          getPosition: d => d.position,
+          getIcon: d => d.icon,
+          getSize: d => d.size,
           sizeScale:
             -40.28287 + 0.1462691 * zoom + 0.3593278 * Math.pow(zoom, 2)
         })
@@ -300,28 +308,16 @@ class MapBox extends Component {
 
     return (
       <div id="mapbox" className="app-map">
-        <InteractiveMap
-          ref={this.handleMapRef}
-          onViewportChange={this.handleViewportChange}
-          mapboxApiAccessToken={process.env.MAPBOX_ACCESS_TOKEN}
+        <DeckGL
           width={this.props.width}
           height={this.props.height}
-          latitude={this.state.viewport.latitude}
-          longitude={this.state.viewport.longitude}
-          transitionInterpolator={this.state.viewport.transitionInterpolator}
-          transitionDuration={this.state.viewport.transitionDuration}
-          zoom={this.state.viewport.zoom}
-          dragPan={this.state.settings.dragPan}
-          mapControls={this.mapControls}>
-          <DeckGL
-            width={this.props.width}
-            height={this.props.height}
-            latitude={this.state.viewport.latitude}
-            longitude={this.state.viewport.longitude}
-            zoom={this.state.viewport.zoom}
-            layers={layers}
-          />
-        </InteractiveMap>
+          viewState={this.state.viewState}
+          onViewStateChange={this.handleViewStateChange}
+          onDragStart={this.handleDragStart}
+          controller={true}
+          layers={layers}>
+          <Map mapStyle={MAP_STYLE} />
+        </DeckGL>
       </div>
     );
   }
@@ -330,9 +326,15 @@ class MapBox extends Component {
 MapBox.propTypes = {
   width: PropTypes.number.isRequired,
   height: PropTypes.number.isRequired,
-  onBoundsChanged: PropTypes.func,
+  onViewportChange: PropTypes.func,
+  onClearLocation: PropTypes.func,
   location: TrimetricPropTypes.location,
-  locationClicked: TrimetricPropTypes.locationClicked
+  locationClicked: TrimetricPropTypes.locationClicked,
+  stopsPointData: PropTypes.array,
+  stopsIconData: PropTypes.array,
+  vehiclesPointData: PropTypes.array,
+  vehiclesIconData: PropTypes.array,
+  lineData: PropTypes.array
 };
 
 function mapDispatchToProps(dispatch) {

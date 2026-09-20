@@ -1,111 +1,87 @@
 // Karma configuration
-var webpack = require("webpack");
-var DotenvPlugin = require("webpack-dotenv-plugin");
+const path = require("path");
+const webpack = require("webpack");
 
-if (!process.env.NODE_ENV) {
-  process.env.NODE_ENV = "test";
-}
+const DEFAULT_MAP_STYLE =
+  "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+
+process.env.CHROME_BIN =
+  process.env.CHROME_BIN || process.env.CHROMIUM_BIN || undefined;
 
 module.exports = function(config) {
   config.set({
-    // base path that will be used to resolve all patterns (eg. files, exclude)
-    // basePath: "",
-    // frameworks to use
-    // available frameworks: https://npmjs.org/browse/keyword/karma-adapter
-    frameworks: ["mocha"],
-    // list of files / patterns to load in the browser
-    files: ["test.webpack.js"],
-    // list of files to exclude
-    // exclude: [],
-    // preprocess matching files before serving them to the browser
-    // available preprocessors: https://npmjs.org/browse/keyword/karma-preprocessor
-    preprocessors: {
-      "test.webpack.js": ["webpack", "sourcemap"]
+    basePath: path.resolve(__dirname, ".."),
+    frameworks: ["mocha", "webpack"],
+    files: [
+      {pattern: "web/test.webpack.js", watched: false},
+      // deck.gl fetches the icon atlas over HTTP, so it has to be served.
+      {pattern: "web/assets/*", included: false, served: true, watched: false}
+    ],
+    proxies: {
+      "/assets/": "/base/web/assets/"
     },
-    // test results reporter to use
-    // possible values: 'dots', 'progress'
-    // available reporters: https://npmjs.org/browse/keyword/karma-reporter
-    reporters: ["mocha", "notify", "coverage", "clear-screen"],
+    preprocessors: {
+      "web/test.webpack.js": ["webpack", "sourcemap"]
+    },
+    reporters: ["mocha"],
     mochaReporter: {
       showDiff: true
     },
-
-    // web server port
-    port: 9876,
-    // enable / disable colors in the output (reporters and logs)
+    port: 9877,
     colors: true,
-    // level of logging
-    // possible values: config.LOG_DISABLE || config.LOG_ERROR || config.LOG_WARN || config.LOG_INFO || config.LOG_DEBUG
     logLevel: config.LOG_INFO,
     browserConsoleLogOptions: {
       level: "log",
       format: "%b %T: %m",
       terminal: true
     },
-
-    // enable / disable watching file and executing tests whenever any file changes
     autoWatch: true,
-    // start these browsers
-    // available browser launchers: https://npmjs.org/browse/keyword/karma-launcher
-    browsers: ["Chrome"],
+    browsers: ["ChromeHeadlessNoSandbox"],
+    customLaunchers: {
+      // The GPU sandbox is unavailable in most CI containers, and deck.gl
+      // needs WebGL, which headless Chrome only provides through SwiftShader.
+      ChromeHeadlessNoSandbox: {
+        base: "ChromeHeadless",
+        flags: [
+          "--no-sandbox",
+          "--disable-dev-shm-usage",
+          "--use-gl=swiftshader",
+          "--enable-unsafe-swiftshader",
+          "--ignore-gpu-blocklist"
+        ]
+      }
+    },
     webpack: {
+      mode: "development",
       devtool: "inline-source-map",
-      externals: {
-        // Enzyme includes require statements for these modules for backwards compatibility
-        // with older versions of React. Webpack gets confused by these, even though
-        // they will never actually be required. We are Marking them as externals
-        // so webpack doesn't complain.
-        "react/addons": true,
-        "react/lib/ExecutionEnvironment": true,
-        "react/lib/ReactContext": true
-      },
       module: {
-        // rename to rules
         rules: [
-          // {
-          //   test: /\.json$/,
-          //   loader: "json-loader",
-          // },
           {
             test: /\.jsx?$/,
             exclude: /node_modules/,
-            use: {
-              loader: "babel-loader",
-              options: {
-                presets: ["es2015", "react"]
-              }
-            }
+            use: {loader: "babel-loader"}
           },
           {
             test: /\.s?css$/,
-            use: [
-              {loader: "style-loader"},
-              {loader: "css-loader"},
-              {loader: "sass-loader"}
-            ]
+            use: ["style-loader", "css-loader", "sass-loader"]
+          },
+          {
+            test: /\.(woff|woff2|eot|ttf|svg|png)$/,
+            type: "asset/resource"
           }
         ]
       },
       resolve: {
-        extensions: [".js", ".jsx", ".json"]
+        extensions: [".js", ".jsx"]
       },
-      plugins: [new DotenvPlugin()],
-      watch: true
+      plugins: [
+        new webpack.EnvironmentPlugin({
+          NODE_ENV: "test",
+          MAP_STYLE: DEFAULT_MAP_STYLE
+        })
+      ]
     },
-    webpackServer: {
-      noInfo: true
-    },
-
-    // Continuous Integration mode
-    // if true, Karma captures browsers, runs the tests and exits
     singleRun: false,
-
-    // Concurrency level
-    // how many browser should be started simultaneous
-    concurrency: Infinity,
-    coverageReporter: {
-      type: "html", //produces a html document after code is run
-      dir: "coverage" //path to created html doc
-    }
+    concurrency: Infinity
   });
 };

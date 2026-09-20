@@ -1,5 +1,5 @@
 import React, {Component} from "react";
-import ReactCSSTransitionGroup from "react-addons-css-transition-group";
+import {CSSTransitionGroup} from "react-transition-group";
 import {connect} from "react-redux";
 import {withRouter} from "react-router-dom";
 
@@ -83,13 +83,13 @@ export class App extends Component {
           width={this.state.mapWidth}
           height={this.state.mapHeight}
         />
-        <ReactCSSTransitionGroup
+        <CSSTransitionGroup
           component="div"
           transitionName="page"
           transitionEnterTimeout={700}
           transitionLeaveTimeout={700}>
           {page}
-        </ReactCSSTransitionGroup>
+        </CSSTransitionGroup>
       </div>
     );
   }

@@ -1,8 +1,6 @@
 {
-    "presets": ["es2015", "react"],
-    "env": {
-        "test": {
-            "plugins": ["babel-plugin-__coverage__"]
-        }
-    }
+  "presets": [
+    ["@babel/preset-env", {"targets": {"browsers": ["defaults"]}}],
+    ["@babel/preset-react", {"runtime": "classic"}]
+  ]
 }
