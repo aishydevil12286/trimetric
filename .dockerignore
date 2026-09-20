@@ -1,4 +1,7 @@
 .git
 node_modules
+web/dist
 coverage
-dist
+secrets
+data
+*.log

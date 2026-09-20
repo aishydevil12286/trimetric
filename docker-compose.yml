@@ -1,75 +1,68 @@
-version: '3.3'
+# Default stack: Postgres/PostGIS plus the app, which ingests the feeds and
+# serves the web UI on http://localhost:8080.
+#
+# Optional extras, each layered on top of this file:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#   docker compose -f docker-compose.yml -f docker-compose.kafka.yml up
+
 services:
-  api:
-    depends_on:
-      - influxdb
-      - kafka
-      - postgres
-      - redis
-    image: bsdavidson/trimetric
-    ports:
-      - "8181:80"
-    restart: always
-    secrets:
-      - postgres-password
-      - trimet-api-key
-
-  influxdb:
-    image: influxdb:alpine
-    env_file:
-      - ./secrets/influxdb.env
-    environment:
-      - INFLUXDB_DB=trimetric
-      - INFLUXDB_HTTP_LOG_ENABLED=false
-      - INFLUXDB_USER=trimetric
-    restart: always
-    volumes:
-      - influxdb:/var/lib/influxdb
-
-  kafka:
-    hostname: kafka
-    image: wurstmeister/kafka:0.10.2.1
-    depends_on:
-      - zookeeper
-    environment:
-      - KAFKA_ADVERTISED_HOST_NAME=kafka
-      - KAFKA_ADVERTISED_PORT=9092
-      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
-      - KAFKA_LOG_RETENTION_BYTES=104857600
-      - KAFKA_LOG_RETENTION_HOURS=1
-      - KAFKA_LOG_SEGMENT_BYTES=104857600
-    restart: always
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - kafka:/kafka
-
   postgres:
-    image: mdillon/postgis
+    image: postgis/postgis:16-3.4
     environment:
-      - POSTGRES_USER=trimetric
-      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres-password
-    restart: always
-    secrets:
-      - postgres-password
+      POSTGRES_USER: trimetric
+      POSTGRES_DB: trimetric
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-example}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trimetric -d trimetric"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-test-db.sh:/docker-entrypoint-initdb.d/init-test-db.sh:ro
 
-  redis:
-    image: redis:alpine
-    restart: always
+  api:
+    build:
+      context: .
+    command:
+      - "-addr=:8080"
+      - "-web-path=./web/dist"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGUSER: trimetric
+      PGDATABASE: trimetric
+      PGPASSWORD: ${POSTGRES_PASSWORD:-example}
 
-  zookeeper:
-    image: zookeeper
-    restart: always
+      # Your Open Transit Data key, from https://otd.delhi.gov.in/data/realtime/
+      OTD_API_KEY: ${OTD_API_KEY:?set OTD_API_KEY in .env - see README}
 
-secrets:
-  postgres-password:
-    file: ./secrets/postgres-password
-  trimet-api-key:
-    file: ./secrets/trimet-api-key
+      # Where to get the static schedule. Downloading it from the portal needs
+      # a CSRF POST and can break when the portal changes; if it does, drop the
+      # zip in ./data and set GTFS_STATIC_FILE=/data/gtfs.zip in .env instead.
+      GTFS_STATIC_URL: ${GTFS_STATIC_URL:-https://otd.delhi.gov.in/data/static/}
+      GTFS_STATIC_FILE: ${GTFS_STATIC_FILE:-}
+      GTFS_STATIC_CSRF: ${GTFS_STATIC_CSRF:-true}
+
+      GTFS_VEHICLE_POSITIONS_URL: ${GTFS_VEHICLE_POSITIONS_URL:-https://otd.delhi.gov.in/api/realtime/VehiclePositions.pb}
+      # OTD publishes no TripUpdates feed; set this if that changes.
+      GTFS_TRIP_UPDATES_URL: ${GTFS_TRIP_UPDATES_URL:-}
+      GTFS_TIMEZONE: ${GTFS_TIMEZONE:-Asia/Kolkata}
+
+      # Empty keeps the realtime pipeline in-process. See docker-compose.kafka.yml.
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-}
+    ports:
+      - "8080:8080"
+      - "9876:9876"
+    restart: unless-stopped
+    volumes:
+      # Anything you drop in ./data is readable at /data inside the container.
+      - ./data:/data:ro
 
 volumes:
-  chronograf: {}
-  influxdb: {}
-  kafka: {}
   pgdata: {}

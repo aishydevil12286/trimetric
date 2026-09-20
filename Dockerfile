@@ -1,17 +1,27 @@
-FROM trimetric-web AS web-build
+# Build the web assets.
+FROM node:22-alpine AS web
+WORKDIR /src
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY .babelrc ./
+COPY web ./web
+RUN npm run dist
 
-FROM trimetric-api AS api-build
+# Build the API.
+FROM golang:1.24-alpine AS api
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -o /trimetric ./cmd/trimetric
 
-FROM busybox:glibc
-
-COPY --from=web-build /opt/trimetric/web/dist /opt/trimetric/web/dist
-COPY --from=api-build /go/bin/trimetric /opt/trimetric/
-COPY --from=api-build /go/src/github.com/bsdavidson/trimetric/migrations /opt/trimetric/migrations
-COPY --from=api-build /etc/ssl/certs /etc/ssl/certs
+FROM alpine:3.21
+# ca-certificates lets the app fetch the feeds over HTTPS; tzdata gives it
+# the Asia/Kolkata definition used to resolve GTFS service days.
+RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /opt/trimetric
-
-EXPOSE 80
-
-VOLUME ["/opt/trimetric"]
-
-CMD ["./trimetric", "-migrate"]
+COPY --from=api /trimetric ./trimetric
+COPY --from=api /src/migrations ./migrations
+COPY --from=web /src/web/dist ./web/dist
+EXPOSE 8080 9876
+ENTRYPOINT ["./trimetric"]

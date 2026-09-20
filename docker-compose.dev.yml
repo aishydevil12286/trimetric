@@ -1,0 +1,44 @@
+# Development overlay: source is mounted into both services, the web app is
+# served by webpack-dev-server with hot reload on http://localhost:8080, and
+# the API runs from source behind it on 8081.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# The web app reloads on save. The API is compiled on start, so restart it
+# after changing Go code:  docker compose restart api
+services:
+  api:
+    image: golang:1.24-alpine
+    build: !reset null
+    command: go run ./cmd/trimetric -addr=:8081 -web-path=./web/dist
+    ports:
+      - "8081:8081"
+      - "9876:9876"
+    volumes:
+      - .:/src
+      - ./data:/data:ro
+      - gocache:/root/.cache/go-build
+      - gomod:/go/pkg/mod
+    working_dir: /src
+
+  web:
+    image: node:22-alpine
+    depends_on:
+      - api
+    command: sh -c "npm install && npm run watch"
+    environment:
+      # webpack-dev-server proxies /api and /ws through to the API container.
+      API_TARGET: http://api:8081
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/src
+      # Keep the container's node_modules out of the host tree, so a Linux
+      # install does not collide with whatever the host platform installed.
+      - node_modules:/src/node_modules
+    working_dir: /src
+
+volumes:
+  gocache: {}
+  gomod: {}
+  node_modules: {}
