@@ -49,6 +49,10 @@ type Config struct {
 	// Timezone is the agency timezone used to resolve GTFS service days.
 	Timezone string
 
+	// RouteLineTypes selects which GTFS route types get their shape drawn as
+	// a line on the map. Empty uses the rail-like default.
+	RouteLineTypes []int
+
 	// KafkaBrokers routes realtime data through Kafka rather than straight
 	// into Postgres. Empty, the default, keeps the whole pipeline in-process.
 	KafkaBrokers []string
@@ -132,7 +136,7 @@ func startPipeline(ctx context.Context, cancel context.CancelFunc, wg *sync.Wait
 func Run(ctx context.Context, cancel context.CancelFunc, db *sql.DB, cfg Config) error {
 	vds := &logic.VehicleSQLDataset{DB: db}
 	sds := &logic.StopSQLDataset{DB: db, Timezone: cfg.Timezone}
-	shds := &logic.ShapeSQLDataset{DB: db}
+	shds := &logic.ShapeSQLDataset{DB: db, RouteLineTypes: cfg.RouteLineTypes}
 	rds := &logic.RouteSQLDataset{DB: db}
 	lds := &logic.LoaderSQLDataset{DB: db}
 	tuds := &logic.TripUpdateSQLDataset{DB: db}

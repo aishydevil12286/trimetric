@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,6 +78,7 @@ func main() {
 	tripUpdateInterval := flag.Duration("trip-updates-interval", 30*time.Second, "How often to poll trip updates")
 
 	timezone := flag.String("timezone", env("GTFS_TIMEZONE", gtfs.DefaultTimezone), "Agency timezone, used to resolve GTFS service days")
+	routeLineTypes := flag.String("route-line-types", env("GTFS_ROUTE_LINE_TYPES", ""), "Comma-separated GTFS route types whose shapes are drawn as lines. Empty draws rail-like routes (0,1,2); add 3 for buses")
 
 	kafkaBrokers := flag.String("kafka-brokers", os.Getenv("KAFKA_BROKERS"), "Comma-separated Kafka brokers. Empty keeps the realtime pipeline in-process")
 
@@ -119,6 +121,19 @@ func main() {
 		brokers = strings.Split(*kafkaBrokers, ",")
 	}
 
+	var lineTypes []int
+	for _, s := range strings.Split(*routeLineTypes, ",") {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			log.Fatalf("invalid -route-line-types %q: %v", *routeLineTypes, err)
+		}
+		lineTypes = append(lineTypes, n)
+	}
+
 	cfg := trimetric.Config{
 		Addr:      *addr,
 		DebugAddr: *debugAddr,
@@ -135,6 +150,7 @@ func main() {
 		TripUpdatesURL:      *tripUpdatesURL,
 		TripUpdateInterval:  *tripUpdateInterval,
 		Timezone:            *timezone,
+		RouteLineTypes:      lineTypes,
 		KafkaBrokers:        brokers,
 	}
 

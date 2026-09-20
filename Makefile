@@ -13,6 +13,17 @@ dev:
 kafka:
 	$(COMPOSE) -f docker-compose.yml -f docker-compose.kafka.yml up --build
 
+# Run against a generated mock network instead of the live OTD feeds, so the
+# visualisation can be looked at without an API key. Needs a Postgres: start
+# one with `make up` first, or run `docker compose up postgres`.
+demo:
+	go run ./scripts/mockfeed -zip data/mock-gtfs.zip & \
+	sleep 3 && go run ./cmd/trimetric \
+		-addr=:8080 -pg-host=localhost -api-key=mock \
+		-gtfs-static-file=data/mock-gtfs.zip \
+		-vehicle-positions-url=http://localhost:8899/api/realtime/VehiclePositions.pb \
+		-route-line-types=3 -web-path=./web/dist
+
 down:
 	$(COMPOSE) down
 
@@ -43,4 +54,4 @@ node_modules: package.json package-lock.json
 	npm install
 	@touch node_modules
 
-.PHONY: up dev kafka down clean build lint test test-go test-web
+.PHONY: up dev kafka demo down clean build lint test test-go test-web

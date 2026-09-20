@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/bsdavidson/trimetric/gtfs"
+
 	postgis "github.com/cridenour/go-postgis"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -20,6 +22,29 @@ type ShapeDataset interface {
 // retrieve and update shapes from the database
 type ShapeSQLDataset struct {
 	DB *sql.DB
+
+	// RouteLineTypes selects which GTFS route types get their shape drawn as
+	// a line on the map. Empty means the default set.
+	RouteLineTypes []int
+}
+
+// defaultRouteLineTypes are the rail-like route types: tram, subway and rail.
+//
+// Drawing every route's shape is only reasonable for a network with a handful
+// of trunk lines. A bus network has thousands of shapes, which is both an
+// unreadable map and a very large payload, so buses are opt-in.
+var defaultRouteLineTypes = []int{
+	int(gtfs.RouteTypeTram),
+	int(gtfs.RouteTypeSubway),
+	int(gtfs.RouteTypeRail),
+}
+
+// routeLineTypes returns the configured route types, or the default set.
+func (sd *ShapeSQLDataset) routeLineTypes() []int {
+	if len(sd.RouteLineTypes) == 0 {
+		return defaultRouteLineTypes
+	}
+	return sd.RouteLineTypes
 }
 
 // Shape represents the shape line for a given route.

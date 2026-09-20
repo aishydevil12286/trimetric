@@ -82,6 +82,7 @@ Everything is set by environment variable (via `.env`) or by flag. Run
 | `GTFS_VEHICLE_POSITIONS_URL` | `https://otd.delhi.gov.in/api/realtime/VehiclePositions.pb` | Realtime vehicle positions |
 | `GTFS_TRIP_UPDATES_URL` | *(empty)* | Realtime trip updates; empty disables them |
 | `GTFS_TIMEZONE` | `Asia/Kolkata` | Agency timezone, used to resolve GTFS service days |
+| `GTFS_ROUTE_LINE_TYPES` | *(empty)* | Route types drawn as lines on the map; empty means rail-like only (see below) |
 | `KAFKA_BROKERS` | *(empty)* | Empty keeps the realtime pipeline in-process |
 | `POSTGRES_PASSWORD` | `example` | Database password |
 
@@ -101,6 +102,40 @@ GTFS_TIMEZONE=America/Los_Angeles
 
 Note that TriMet expects its key in an `appID` query parameter rather than
 `key`; that name is a constant in `gtfs/feed.go`.
+
+
+## Seeing it without a key
+
+`make demo` generates a synthetic bus network and serves it as GTFS plus
+GTFS-realtime, so you can look at the visualization without an OTD key and
+without waiting on the portal. It needs a Postgres, so start one first:
+
+```sh
+docker compose up -d postgres
+npm install && npm run build
+make demo
+```
+
+The generator lives in `scripts/mockfeed`. It builds radial corridors, ring
+roads and cross-town routes around Connaught Place, hangs shared stops off
+them, writes a full schedule, and then animates buses along the shapes. Nothing
+in it is Delhi's real network — the place names are real localities, the
+geometry is invented. Defaults produce 31 routes, ~370 stops, ~6800 trips,
+~83000 stop times and 310 moving vehicles; `-radials`, `-rings`, `-crosstown`
+and `-buses-per-route` change the scale.
+
+
+## Route lines
+
+The coloured lines under the vehicles are route shapes. Which routes get one is
+controlled by `GTFS_ROUTE_LINE_TYPES`, and the default is rail-like types only
+(tram, subway, rail).
+
+That default is inherited from upstream, where it drew Portland's MAX light
+rail and nothing else. **Delhi's feed is all buses, so by default no route
+lines are drawn.** Set `GTFS_ROUTE_LINE_TYPES=3` to draw bus corridors. On a
+subset of the network that looks good; on the whole of Delhi's feed it is a lot
+of geometry to push over the websocket and a dense map, so try it and decide.
 
 
 ## Development
@@ -183,6 +218,13 @@ changes:
   `react-map-gl`.
 - The TriMet-only `/api/v1/trimet/arrivals` proxy is gone; `/api/v1/arrivals`
   is computed from GTFS and remains.
+- **Vehicle bearing is stored as a float.** The column was a `smallint`, so
+  every vehicle insert failed with a type error against any feed sending a
+  fractional bearing, which GTFS-realtime allows and most feeds do.
+- **Shape ids are read as strings.** Both shape queries scanned `shape_id`
+  into an `int`, which only worked because TriMet numbers its shapes. This
+  broke the arrivals endpoint, not just the map.
+- **Route lines are configurable** rather than hard-coded to light rail.
 
 
 ## Data licence

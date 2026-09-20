@@ -55,13 +55,13 @@ func (sd *ShapeSQLDataset) FetchTripShapes(tripIDs []string) (map[string]*TripSh
 	defer rows.Close()
 
 	shapes := map[string]*TripShape{}
-	var lastShapeID int
+	var lastShapeID string
 	var lastShape *TripShape
 	for rows.Next() {
 		var tripID string
 		var routeID string
 		var direction int
-		var id int
+		var id string
 		var color string
 		var p RoutePoint
 		var lngLat postgis.PointS
@@ -91,8 +91,8 @@ func (sd *ShapeSQLDataset) FetchTripShapes(tripIDs []string) (map[string]*TripSh
 	return shapes, nil
 }
 
-// FetchRouteShapes returns all shapes for train routes and flattens them to
-// reduce the amount of data.
+// FetchRouteShapes returns the shapes of every route whose type is selected
+// by RouteLineTypes, flattened to reduce the amount of data.
 func (sd *ShapeSQLDataset) FetchRouteShapes() ([]*RouteShape, error) {
 	q := `
 		SELECT id, pt_lon_lat, route_shapes.route_id, route_shapes.direction_id, route_shapes.route_color
@@ -101,24 +101,24 @@ func (sd *ShapeSQLDataset) FetchRouteShapes() ([]*RouteShape, error) {
 			SELECT DISTINCT trips.shape_id, routes.id as route_id, trips.direction_id as direction_id, routes.color as route_color
 			FROM routes
 			JOIN trips ON trips.route_id = routes.id
-			WHERE routes.type = 0
+			WHERE routes.type = ANY($1)
 		) AS route_shapes ON route_shapes.shape_id = shapes.id
 		ORDER BY id, pt_sequence ASC
 	`
 
-	rows, err := sd.DB.Query(q)
+	rows, err := sd.DB.Query(q, pq.Array(sd.routeLineTypes()))
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 	defer rows.Close()
 
 	shapes := []*RouteShape{}
-	var lastShapeID int
+	var lastShapeID string
 	var lastShape *RouteShape
 	for rows.Next() {
 		var routeID string
 		var direction int
-		var id int
+		var id string
 		var color string
 		var p RoutePoint
 		var lngLat postgis.PointS

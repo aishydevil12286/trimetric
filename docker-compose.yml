@@ -54,6 +54,12 @@ services:
       GTFS_TRIP_UPDATES_URL: ${GTFS_TRIP_UPDATES_URL:-}
       GTFS_TIMEZONE: ${GTFS_TIMEZONE:-Asia/Kolkata}
 
+      # Which route types get their shape drawn as a line on the map. Empty
+      # draws rail-like routes only (0,1,2). Delhi's feed is all buses, so
+      # setting this to 3 draws bus corridors -- readable on a subset of the
+      # network, a lot of geometry on the whole of it.
+      GTFS_ROUTE_LINE_TYPES: ${GTFS_ROUTE_LINE_TYPES:-}
+
       # Empty keeps the realtime pipeline in-process. See docker-compose.kafka.yml.
       KAFKA_BROKERS: ${KAFKA_BROKERS:-}
     ports:
