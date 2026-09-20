@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bsdavidson/trimetric/trimet"
+	"github.com/bsdavidson/trimetric/gtfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -32,14 +32,14 @@ func (m *mockProducer) Produce(b []byte) error {
 	return nil
 }
 
-func loadVehicles(t *testing.T, db *sql.DB) []trimet.VehiclePosition {
+func loadVehicles(t *testing.T, db *sql.DB) []gtfs.VehiclePosition {
 	f, err := os.Open("./testdata/vehicles.json")
 	require.NoError(t, err)
 
 	b, err := ioutil.ReadAll(f)
 	require.NoError(t, err)
 
-	var vehicles []trimet.VehiclePosition
+	var vehicles []gtfs.VehiclePosition
 	err = json.Unmarshal(b, &vehicles)
 	require.NoError(t, err)
 
@@ -53,7 +53,7 @@ func TestFetchByIds(t *testing.T) {
 	vehicles := loadVehicles(t, db)
 	assert.Equal(t, 33, len(vehicles))
 	vds := VehicleSQLDataset{DB: db}
-	sv := make([]trimet.VehiclePosition, 2)
+	sv := make([]gtfs.VehiclePosition, 2)
 	for _, v := range vehicles {
 		if *v.Vehicle.ID == "201" {
 			sv[0] = v
@@ -112,9 +112,9 @@ func TestProduceVehicles(t *testing.T) {
 
 	vds := VehicleSQLDataset{DB: db}
 
-	var expected trimet.VehiclePosition
+	var expected gtfs.VehiclePosition
 	for _, b := range mp.bytes {
-		vp := trimet.VehiclePosition{}
+		vp := gtfs.VehiclePosition{}
 		_, err := vp.UnmarshalMsg(b)
 		require.NoError(t, err)
 		if *vp.Vehicle.ID == "3505" {

@@ -1,0 +1,13 @@
+trip_id,stop_id,stop_sequence,arrival_time,departure_time,shape_dist_traveled
+t_101_up,s_nehru,1,08:00:00,08:00:00,0
+t_101_up,s_saket,2,08:20:00,08:21:00,5200.5
+t_101_up,s_mehrauli,3,08:45:00,08:45:00,11400
+t_101_dn,s_mehrauli,1,09:00:00,09:00:00,0
+t_101_dn,s_saket,2,09:25:00,09:26:00,6200
+t_101_dn,s_nehru,3,09:50:00,09:50:00,11400
+t_340_up,s_anand,1,23:40:00,23:40:00,0
+t_340_up,s_kashmere,2,24:35:00,24:35:00,14800
+t_764_we,s_nehru,1,10:00:00,10:00:00,0
+t_764_we,s_saket,2,10:30:00,10:30:00,5200
+t_ghost,s_nehru,1,07:00:00,07:00:00,0
+t_101_up,s_does_not_exist,4,08:55:00,08:55:00,12000

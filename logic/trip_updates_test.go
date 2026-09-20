@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
-	"github.com/bsdavidson/trimetric/trimet"
+	"github.com/bsdavidson/trimetric/gtfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,11 +35,11 @@ func TestProduceTripUpdates(t *testing.T) {
 
 	mp := &mockProducer{T: t}
 
-	err = ProduceTripUpdates(ctx, ts.URL, "123", mp)
+	err = ProduceTripUpdates(ctx, ts.URL, "123", mp, 10*time.Millisecond)
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, len(mp.bytes))
-	var vp trimet.TripUpdatesMsg
+	var vp gtfs.TripUpdatesMsg
 	for _, b := range mp.bytes {
 		_, err := vp.UnmarshalMsg(b)
 		require.NoError(t, err)

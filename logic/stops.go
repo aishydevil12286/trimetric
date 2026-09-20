@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bsdavidson/trimetric/trimet"
+	"github.com/bsdavidson/trimetric/gtfs"
 	postgis "github.com/cridenour/go-postgis"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -24,7 +24,7 @@ func rollbackError(rberr error, err error) error {
 // Distance is calculated via PostGIS and the result is used to
 // provide a list of stops within a specified distance from a specific point.
 type StopWithDistance struct {
-	trimet.Stop
+	gtfs.Stop
 	Distance float64 `json:"distance"`
 }
 
@@ -40,6 +40,19 @@ type StopDataset interface {
 // retrieve and update stops from the database
 type StopSQLDataset struct {
 	DB *sql.DB
+
+	// Timezone is the agency's timezone, used to work out which GTFS service
+	// day "now" falls in. Schedules are written in local time with no offset,
+	// so this cannot be inferred from the data.
+	Timezone string
+}
+
+// timezone returns the configured timezone, defaulting to the feed package's.
+func (sd *StopSQLDataset) timezone() string {
+	if sd.Timezone == "" {
+		return gtfs.DefaultTimezone
+	}
+	return sd.Timezone
 }
 
 // FetchAllStops ...
@@ -142,21 +155,21 @@ func (sd *StopSQLDataset) FetchWithinBox(w, s, e, n string) ([]StopWithDistance,
 
 // Arrival ...
 type Arrival struct {
-	RouteID         string          `json:"route_id"`
-	RouteShortName  string          `json:"route_short_name"`
-	RouteLongName   string          `json:"route_long_name"`
-	RouteType       int             `json:"route_type"`
-	RouteColor      string          `json:"route_color"`
-	RouteTextColor  string          `json:"route_text_color"`
-	TripID          string          `json:"trip_id"`
-	StopID          string          `json:"stop_id"`
-	Headsign        string          `json:"headsign"`
-	ArrivalTime     *trimet.Time    `json:"arrival_time"`
-	DepartureTime   *trimet.Time    `json:"departure_time"`
-	VehicleID       *string         `json:"vehicle_id"`
-	VehicleLabel    *string         `json:"vehicle_label"`
-	VehiclePosition trimet.Position `json:"vehicle_position"`
-	Date            time.Time       `json:"date"`
+	RouteID         string        `json:"route_id"`
+	RouteShortName  string        `json:"route_short_name"`
+	RouteLongName   string        `json:"route_long_name"`
+	RouteType       int           `json:"route_type"`
+	RouteColor      string        `json:"route_color"`
+	RouteTextColor  string        `json:"route_text_color"`
+	TripID          string        `json:"trip_id"`
+	StopID          string        `json:"stop_id"`
+	Headsign        string        `json:"headsign"`
+	ArrivalTime     *gtfs.Time    `json:"arrival_time"`
+	DepartureTime   *gtfs.Time    `json:"departure_time"`
+	VehicleID       *string       `json:"vehicle_id"`
+	VehicleLabel    *string       `json:"vehicle_label"`
+	VehiclePosition gtfs.Position `json:"vehicle_position"`
+	Date            time.Time     `json:"date"`
 }
 
 func parseDuration(s string) (*time.Duration, error) {
@@ -183,12 +196,31 @@ func parseDuration(s string) (*time.Duration, error) {
 // FetchArrivals returns a list of arrivals by combining multiple data sets.
 func (sd *StopSQLDataset) FetchArrivals(stopIDs []string) ([]Arrival, error) {
 	var err error
+	// A GTFS arrival_time is an offset from the start of its service day, and
+	// can run past 24:00:00 for trips that cross midnight. So "arriving in the
+	// next hour" has to be asked of two service days at once: today, and
+	// yesterday's day still running past midnight.
 	q := `
+		WITH local_now AS (
+			SELECT now() AT TIME ZONE $2::text AS ts
+		), service_days AS (
+			SELECT
+				ts::date AS service_date,
+				ts::time - time '00:00:00' AS elapsed,
+				interval '0' AS day_offset
+			FROM local_now
+			UNION ALL
+			SELECT
+				(ts - interval '1 day')::date,
+				ts::time - time '00:00:00',
+				interval '24 hours'
+			FROM local_now
+		)
 		SELECT
 			r.id, r.short_name, r.long_name, r.type, r.color, r.text_color, t.id,
 			st.stop_id, COALESCE(st.stop_headsign, t.headsign), st.arrival_time,
 			st.departure_time, v.vehicle_id, v.position_lon_lat, v.position_bearing,
-			v.vehicle_label, cd.date
+			v.vehicle_label, d.service_date
 		FROM routes r
 		JOIN trips t ON t.route_id = r.id
 		JOIN stop_times st ON st.trip_id = t.id
@@ -198,19 +230,13 @@ func (sd *StopSQLDataset) FetchArrivals(stopIDs []string) ([]Arrival, error) {
 			FROM vehicle_positions
 			ORDER BY trip_id, vehicle_id ASC
 		) v ON v.trip_id = t.id
-		JOIN calendar_dates cd ON cd.service_id = t.service_id
-		WHERE st.stop_id = ANY($1) AND ((
-			cd.date = (now() AT TIME ZONE 'America/Los_Angeles')::date AND
-			st.arrival_time >= (now() AT TIME ZONE 'America/Los_Angeles')::time AND
-			st.arrival_time <= ((now() AT TIME ZONE 'America/Los_Angeles')::time - '00:00:00'::time) + interval '1 hour'
-		) OR (
-			cd.date = ((now() AT TIME ZONE 'America/Los_Angeles') - interval '1 day')::date AND
-			st.arrival_time >= '24:00:00'::interval + ((now() AT TIME ZONE 'America/Los_Angeles')::time - '00:00:00'::time) AND
-			st.arrival_time <= '24:00:00'::interval + ((now() AT TIME ZONE 'America/Los_Angeles')::time - '00:00:00'::time) + interval '1 hour'
-		))
+		JOIN service_days d ON service_active(t.service_id, d.service_date)
+		WHERE st.stop_id = ANY($1)
+			AND st.arrival_time >= d.day_offset + d.elapsed
+			AND st.arrival_time <= d.day_offset + d.elapsed + interval '1 hour'
 		ORDER BY st.arrival_time ASC;
 	`
-	rows, err := sd.DB.Query(q, pq.Array(stopIDs))
+	rows, err := sd.DB.Query(q, pq.Array(stopIDs), sd.timezone())
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/bsdavidson/trimetric/trimet"
-	"github.com/pressly/goose"
+	"github.com/bsdavidson/trimetric/gtfs"
+	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,9 +22,12 @@ func init() {
 func setupTestDB(t *testing.T) *sql.DB {
 	db, err := sql.Open("postgres", fmt.Sprintf("postgres://trimetric:example@%s/test_trimetric?sslmode=disable", postgresAddr))
 	require.NoError(t, err)
+	require.NoError(t, goose.SetDialect("postgres"))
 	require.NoError(t, goose.Up(db, "../migrations"))
 	tables := []string{
+		"calendar",
 		"calendar_dates",
+		"feed_loads",
 		"routes",
 		"services",
 		"shapes",
@@ -43,7 +46,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 }
 
 func loadStopFixtures(t *testing.T, db *sql.DB) *StopSQLDataset {
-	stops, err := trimet.ReadGTFSCSV("./testdata/stops.txt")
+	stops, err := gtfs.ReadGTFSCSV("./testdata/stops.txt")
 	require.NoError(t, err)
 
 	lds := LoaderSQLDataset{DB: db}
@@ -51,7 +54,7 @@ func loadStopFixtures(t *testing.T, db *sql.DB) *StopSQLDataset {
 	tx, err := db.Begin()
 	require.NoError(t, err)
 
-	require.NoError(t, lds.LoadStops(tx, stops))
+	require.NoError(t, lds.LoadStops(tx, stops, map[string]struct{}{}))
 	require.NoError(t, tx.Commit())
 	return &sds
 }

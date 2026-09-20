@@ -6,17 +6,15 @@ import (
 	"log"
 	"time"
 
-	"github.com/bsdavidson/trimetric/trimet"
+	"github.com/bsdavidson/trimetric/gtfs"
 	"github.com/pkg/errors"
 )
 
-const tripUpdateDuration = 5000 * time.Millisecond
-
 // TripUpdatesDataset provides methods to update and retrieve trip update data
 type TripUpdatesDataset interface {
-	UpdateTripUpdates(tus []trimet.TripUpdate) error
+	UpdateTripUpdates(tus []gtfs.TripUpdate) error
 	UpdateTripUpdateBytes(ctx context.Context, b []byte) error
-	FetchTripUpdates() ([]trimet.TripUpdate, error)
+	FetchTripUpdates() ([]gtfs.TripUpdate, error)
 }
 
 // TripUpdateSQLDataset wraps a DB instance that is used to store trip update data
@@ -25,7 +23,7 @@ type TripUpdateSQLDataset struct {
 }
 
 // FetchTripUpdates return Tripupdates from the DB
-func (tuds *TripUpdateSQLDataset) FetchTripUpdates() ([]trimet.TripUpdate, error) {
+func (tuds *TripUpdateSQLDataset) FetchTripUpdates() ([]gtfs.TripUpdate, error) {
 	tx, err := tuds.DB.Begin()
 	if err != nil {
 		return nil, rollbackError(tx.Rollback(), err)
@@ -52,11 +50,11 @@ func (tuds *TripUpdateSQLDataset) FetchTripUpdates() ([]trimet.TripUpdate, error
 
 	defer rows.Close()
 
-	var tripUpdates []trimet.TripUpdate
+	var tripUpdates []gtfs.TripUpdate
 	tuIndex := map[int64]int{}
 	for rows.Next() {
 
-		var tu trimet.TripUpdate
+		var tu gtfs.TripUpdate
 		var id int64
 		err := rows.Scan(
 			&id, &tu.Trip.TripID, &tu.Trip.RouteID, &tu.Vehicle.ID, &tu.Vehicle.Label,
@@ -82,7 +80,7 @@ func (tuds *TripUpdateSQLDataset) FetchTripUpdates() ([]trimet.TripUpdate, error
 	}
 
 	for rows.Next() {
-		var stu trimet.StopTimeUpdate
+		var stu gtfs.StopTimeUpdate
 		var id int64
 		err := rows.Scan(
 			&id, &stu.StopSequence, &stu.StopID, &stu.Arrival.Delay,
@@ -101,7 +99,7 @@ func (tuds *TripUpdateSQLDataset) FetchTripUpdates() ([]trimet.TripUpdate, error
 }
 
 // UpdateTripUpdates updates trip data in the db.
-func (tuds *TripUpdateSQLDataset) UpdateTripUpdates(tus []trimet.TripUpdate) error {
+func (tuds *TripUpdateSQLDataset) UpdateTripUpdates(tus []gtfs.TripUpdate) error {
 	tx, err := tuds.DB.Begin()
 	if err != nil {
 		return errors.WithStack(err)
@@ -172,7 +170,7 @@ func (tuds *TripUpdateSQLDataset) UpdateTripUpdates(tus []trimet.TripUpdate) err
 
 // UpdateTripUpdateBytes reads bytes and updates the TripUpdates DB
 func (tuds *TripUpdateSQLDataset) UpdateTripUpdateBytes(ctx context.Context, b []byte) error {
-	var tu trimet.TripUpdatesMsg
+	var tu gtfs.TripUpdatesMsg
 
 	_, err := tu.UnmarshalMsg(b)
 	if err != nil {
@@ -188,8 +186,8 @@ func (tuds *TripUpdateSQLDataset) UpdateTripUpdateBytes(ctx context.Context, b [
 
 // ProduceTripUpdates makes requests to the Trimet API and sends the results to
 // a Producer.
-func ProduceTripUpdates(ctx context.Context,baseURL string,  apiKey string, p Producer) error {
-	ticker := time.NewTicker(tripUpdateDuration)
+func ProduceTripUpdates(ctx context.Context, feedURL, apiKey string, p Producer, delay time.Duration) error {
+	ticker := time.NewTicker(delay)
 	defer ticker.Stop()
 
 	for {
@@ -199,12 +197,12 @@ func ProduceTripUpdates(ctx context.Context,baseURL string,  apiKey string, p Pr
 		case <-ticker.C:
 		}
 
-		tripUpdates, err := trimet.RequestTripUpdate(baseURL, apiKey)
+		tripUpdates, err := gtfs.RequestTripUpdates(feedURL, apiKey)
 		if err != nil {
-			log.Println(err)
+			log.Println("trip updates:", err)
 			continue
 		}
-		tripUpdatesMsg := trimet.TripUpdatesMsg{
+		tripUpdatesMsg := gtfs.TripUpdatesMsg{
 			TripUpdates: tripUpdates,
 		}
 

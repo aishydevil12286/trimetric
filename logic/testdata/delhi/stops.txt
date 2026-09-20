@@ -1,0 +1,6 @@
+﻿stop_id,stop_name,stop_lat,stop_lon,stop_code
+s_nehru,Nehru Place Terminal,28.5494,77.2508,10001
+s_saket,Saket Metro Station,28.5205,77.2170,10002
+s_mehrauli,"Mehrauli Terminal, Gate 2",28.5129,77.1799,10003
+s_anand,Anand Vihar ISBT,28.6469,77.3159,10004
+s_kashmere,Kashmere Gate ISBT,28.6675,77.2281,10005

@@ -3,13 +3,13 @@ package logic
 import (
 	"database/sql"
 
-	"github.com/bsdavidson/trimetric/trimet"
+	"github.com/bsdavidson/trimetric/gtfs"
 	"github.com/pkg/errors"
 )
 
 // RouteDataset provides methods to query and update a database table of Shapes
 type RouteDataset interface {
-	FetchRoutes() ([]trimet.Route, error)
+	FetchRoutes() ([]gtfs.Route, error)
 }
 
 // RouteSQLDataset stores a DB instance and provides access to methods to
@@ -19,20 +19,20 @@ type RouteSQLDataset struct {
 }
 
 // FetchRoutes returns a slice of all routes in the database.
-func (sd *RouteSQLDataset) FetchRoutes() ([]trimet.Route, error) {
+func (sd *RouteSQLDataset) FetchRoutes() ([]gtfs.Route, error) {
 	q := `
 		SELECT id,agency_id,short_name,long_name,type,url,color,text_color,sort_order
 		FROM routes
 		ORDER BY id ASC
 	`
-	var routes []trimet.Route
+	var routes []gtfs.Route
 	rows, err := sd.DB.Query(q)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var r trimet.Route
+		var r gtfs.Route
 		err := rows.Scan(&r.RouteID, &r.AgencyID, &r.ShortName, &r.LongName, &r.Type, &r.URL, &r.Color, &r.TextColor, &r.SortOrder)
 		if err != nil {
 			return nil, err

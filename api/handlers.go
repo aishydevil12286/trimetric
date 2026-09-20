@@ -13,8 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/bsdavidson/trimetric/gtfs"
 	"github.com/bsdavidson/trimetric/logic"
-	"github.com/bsdavidson/trimetric/trimet"
 	"github.com/gorilla/websocket"
 )
 
@@ -28,18 +28,6 @@ func commaSplit(s string) []string {
 		return nil
 	}
 	return strings.Split(s, ",")
-}
-
-func commaSplitInts(s string) ([]int, error) {
-	var nums []int
-	for _, sn := range commaSplit(s) {
-		n, err := strconv.Atoi(sn)
-		if err != nil {
-			return nil, err
-		}
-		nums = append(nums, n)
-	}
-	return nums, nil
 }
 
 type stopsWithDistanceResponse struct {
@@ -90,29 +78,6 @@ func HandleStops(sd logic.StopDataset) http.HandlerFunc {
 			httpError(w, "HandleStops:", err, http.StatusInternalServerError)
 			return
 		}
-	}
-}
-
-// HandleTrimetArrivals provides responses for the /api/v1/arrivals endpoint.
-// It proxies requests mostly untouched to the trimet API and returns a list of
-// arrivals for the specified location IDs.
-func HandleTrimetArrivals(apiKey string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-
-		ids, err := commaSplitInts(r.URL.Query().Get("locIDs"))
-		if err != nil {
-			http.Error(w, fmt.Sprintf("error parsing ids: %v", err), http.StatusBadRequest)
-			return
-		}
-
-		b, err := trimet.RequestArrivals(apiKey, ids)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(b)
-
 	}
 }
 
@@ -389,7 +354,7 @@ func sendStaticDataToWS(c *websocket.Conn, chunkify bool, write writeFunc, shds 
 		}
 	}()
 
-	var routes []trimet.Route
+	var routes []gtfs.Route
 	go func() {
 		defer wg.Done()
 		var err error

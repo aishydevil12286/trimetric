@@ -1,0 +1,4 @@
+route_long_name,route_id,route_type,route_short_name,agency_id
+Nehru Place Terminal to Mehrauli Terminal,101,3,101,DTC
+Anand Vihar ISBT to Kashmere Gate ISBT,340,3,340,DIMTS
+Uttam Nagar Terminal to Badarpur Border,764,3,764,DTC

@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/bsdavidson/trimetric/trimet"
+	"github.com/bsdavidson/trimetric/gtfs"
 	postgis "github.com/cridenour/go-postgis"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -94,14 +94,14 @@ func init() {
 
 // VehiclePositionWithRouteType adds routetype to identify the vehicle type
 type VehiclePositionWithRouteType struct {
-	trimet.VehiclePosition
-	RouteType trimet.RouteType `json:"route_type" msg:"route_type"`
+	gtfs.VehiclePosition
+	RouteType gtfs.RouteType `json:"route_type" msg:"route_type"`
 }
 
 // VehicleDataset provides methods to update and retrieve vehicle data
 type VehicleDataset interface {
 	FetchVehiclePositions(since int) ([]VehiclePositionWithRouteType, error)
-	UpsertVehiclePosition(v *trimet.VehiclePosition) error
+	UpsertVehiclePosition(v *gtfs.VehiclePosition) error
 	UpsertVehiclePositionBytes(ctx context.Context, b []byte) error
 }
 
@@ -155,7 +155,7 @@ func (vd *VehicleSQLDataset) FetchVehiclePositions(since int) ([]VehiclePosition
 }
 
 // UpsertVehiclePosition updates/inserts a vehicle in the DB.
-func (vd *VehicleSQLDataset) UpsertVehiclePosition(v *trimet.VehiclePosition) error {
+func (vd *VehicleSQLDataset) UpsertVehiclePosition(v *gtfs.VehiclePosition) error {
 	lonLat := fmt.Sprintf("SRID=4326;POINT(%f %f)", v.Position.Longitude, v.Position.Latitude)
 	q := `
 		INSERT INTO vehicle_positions (
@@ -195,7 +195,7 @@ func (vd *VehicleSQLDataset) UpsertVehiclePosition(v *trimet.VehiclePosition) er
 // UpsertVehiclePositionBytes writes decodes bytes into VehiclePositions and
 // updates the DB.
 func (vd *VehicleSQLDataset) UpsertVehiclePositionBytes(ctx context.Context, b []byte) error {
-	var v trimet.VehiclePosition
+	var v gtfs.VehiclePosition
 
 	o, err := v.UnmarshalMsg(b)
 	if err != nil {
@@ -209,13 +209,17 @@ func (vd *VehicleSQLDataset) UpsertVehiclePositionBytes(ctx context.Context, b [
 	return nil
 }
 
-// ProduceVehiclePositions makes requests to the Trimet API and passes the result
-// to a Producer
-func ProduceVehiclePositions(ctx context.Context, p Producer, baseURL, apiKey string, delay time.Duration) error {
-	vehicleMap := map[string]uint64{}
+// ProduceVehiclePositions polls a GTFS-realtime VehiclePositions feed and
+// passes each changed position to a Producer.
+//
+// Positions whose timestamp has not moved since the last poll are dropped:
+// feeds are polled faster than every vehicle reports, so most of any given
+// response is a repeat of the one before it.
+func ProduceVehiclePositions(ctx context.Context, p Producer, feedURL, apiKey string, delay time.Duration) error {
+	lastSeen := map[string]uint64{}
 	ticker := time.NewTicker(delay)
 	defer ticker.Stop()
-	var highestTimestamp uint64
+
 REQUEST_LOOP:
 	for {
 		select {
@@ -225,46 +229,41 @@ REQUEST_LOOP:
 		}
 
 		queryTime := time.Now()
-		vehicles, err := trimet.RequestVehiclePositions(baseURL, apiKey, highestTimestamp)
+		vehicles, err := gtfs.RequestVehiclePositions(feedURL, apiKey)
 		vehicleProducerRequestDurationSeconds.Observe(time.Since(queryTime).Seconds())
 		if err != nil {
 			vehicleProducerRequestErrorsTotal.Add(1)
-			log.Println(err)
+			log.Println("vehicle positions:", err)
 			continue
 		}
 		vehicleProducerRequestItemsTotal.Add(float64(len(vehicles)))
 
 		t := time.Now()
 		for _, tv := range vehicles {
-
-			if val, ok := vehicleMap[*tv.Vehicle.ID]; ok {
-				if tv.Timestamp == val {
-					vehicleProducerDuplicatesTotal.Add(1)
-					continue
-				}
+			if tv.Vehicle.ID == nil {
+				continue
 			}
-			if tv.Timestamp > highestTimestamp {
-				highestTimestamp = tv.Timestamp - 5
+			id := *tv.Vehicle.ID
+
+			if ts, ok := lastSeen[id]; ok && ts == tv.Timestamp {
+				vehicleProducerDuplicatesTotal.Add(1)
+				continue
 			}
+			lastSeen[id] = tv.Timestamp
+			vehicleProducerDuplicateMapSize.Set(float64(len(lastSeen)))
 
-			vehicleMap[*tv.Vehicle.ID] = tv.Timestamp
-			vehicleProducerDuplicateMapSize.Set(float64(len(vehicleMap)))
-
-			var b []byte
-			msgBytes, err := tv.MarshalMsg(b)
+			msgBytes, err := tv.MarshalMsg(nil)
 			if err != nil {
 				vehicleProducerEncodingErrorsTotal.Add(1)
-				log.Println(err)
+				log.Println("vehicle positions:", err)
 				continue REQUEST_LOOP
 			}
 			vehicleProducerMessagesTotal.Add(1)
-			err = p.Produce(msgBytes)
-			if err != nil {
+			if err := p.Produce(msgBytes); err != nil {
 				vehicleProducerMessageErrorsTotal.Add(1)
-				log.Println(err)
+				log.Println("vehicle positions:", err)
 				continue REQUEST_LOOP
 			}
-
 		}
 
 		vehicleProducerProcessDurationSeconds.Observe(time.Since(t).Seconds())
